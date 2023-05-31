@@ -48,4 +48,3 @@ As you can see, I created a file called `il_demo.txt`. Then:
 - Changing the integrity level to `low` with the `/setintegritylevel` flag changed it to low; we can see now `Mandatory Label\Low Mandatory Level:(NW)` in the output.
 - An empty `SACL` is interpreted a `Medium integrity level`.
 
-
