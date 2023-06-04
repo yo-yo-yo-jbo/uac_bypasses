@@ -53,3 +53,10 @@ As you can see, I created a file called `il_demo.txt`. Then:
 `UAC bypasses` are ways to bypass UAC, and will normally focus on the "default" UAC level, with no user interaction.  
 While Microsoft currently does not consider UAC to be a "security boundary", UAC bypasses are still being investigated and Microsoft still handles UAC bypasses regularly.  
 UAC bypasses come in different shapes and ideas; the best way to examine existing ones is by examining the excellent [UACME github repository](https://github.com/hfiref0x/UACME) which contains implementations of several UAC bypasses, as well as fix status and most importantly - implementation!
+
+When searching for new UAC bypasses, the obvious targets are components that auto-elevate. Those include:
+- `Auto elevated executables` - the best way to hunt for these is to look for an embedded manifest in them that says `<autoElevate>true</autoElevate>`.
+- `Auto elevated COM objects` - those are DLLs that are under a specific list
+
+
+
