@@ -7,7 +7,8 @@ In this blogpost I will describe what UAC is, how to approach UAC bypass hunting
 In the Windows ecosystem, most users run as a local administrator, which is problematic; the security boundary between non-administrator and administrator in Windows is clear, but there is no clear boundary between administrator and running as the `SYSTEM` user (can be easily be done with a `Windows Service`, for example). Today we have other boundaries such as `Protected Processes` and the kernel (enforced with `DSE`) not to mention hypervison technology, but the boundary between administrator and non-administrator is pointless in a world where everyone runs as a local admin.  
 To address the problem, Microsoft introduced `UAC`, which splits the administrator token into two parts: one has restricted privileges (similar to a non-administrator user) and one has elevated privileges. When a privileged operation is about to happen, a user must consent to the operation, and then the elevated token could be used. This procedure is known as `elevation`.  
 This was not perceived well - Windows Vista is known to be full of UAC-style consent popups. To address that, several measures had to be taken:
-- UAC has 4 different levels, ranging between not enforcing at all to "full UAC" (which is what happened during the Vista days). The default mode is somewhere "in-between"; most UAC bypasses focus this level.
+- UAC has 4 different levels, ranging between not enforcing at all to "full UAC" (which is what happened during the Vista days). The default mode is somewhere "in-between"; most UAC bypasses focus this level. Those levels affect various registry values under `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`.
+- Several binaries and COM objects are now `auto-elevated` (based on signature information) - more on that later!
 
 ## Integrity levels
 Securable objects are anything that is associated with mandatory access control enforcement; processes, registry keys, process tokens and even desktop objects are good examples of that.  
@@ -46,5 +47,9 @@ C:\temp>
 As you can see, I created a file called `il_demo.txt`. Then:
 - Viewing its access control list with `icacls` shows the access control entires from the `DACL` (e.g. full control (F) to Administrators), but we do not see an integrity level.
 - Changing the integrity level to `low` with the `/setintegritylevel` flag changed it to low; we can see now `Mandatory Label\Low Mandatory Level:(NW)` in the output.
-- An empty `SACL` is interpreted a `Medium integrity level`.
+- An missing integrity level is interpreted a `Medium integrity level`.
 
+## UAC bypasses
+`UAC bypasses` are ways to bypass UAC, and will normally focus on the "default" UAC level, with no user interaction.  
+While Microsoft currently does not consider UAC to be a "security boundary", UAC bypasses are still being investigated and Microsoft still handles UAC bypasses regularly.  
+UAC bypasses come in different shapes and ideas; the best way to examine existing ones is by examining the excellent [UACME github repository](https://github.com/hfiref0x/UACME) which contains implementations of several UAC bypasses, as well as fix status and most importantly - implementation!
