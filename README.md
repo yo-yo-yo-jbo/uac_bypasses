@@ -54,13 +54,14 @@ As you can see, I created a file called `il_demo.txt`. Then:
 While Microsoft currently does not consider UAC to be a "security boundary", UAC bypasses are still being investigated and Microsoft still handles UAC bypasses regularly.  
 UAC bypasses come in different shapes and ideas; the best way to examine existing ones is by examining the excellent [UACME github repository](https://github.com/hfiref0x/UACME) which contains implementations of several UAC bypasses, as well as fix status and most importantly - implementation!
 
-When searching for new UAC bypasses, the obvious targets are components that auto-elevate. Those include:
+When searching for new UAC bypasses, the obvious targets are components that auto-elevate (i.e. function without a UAC prompt). Those include:
 - `Auto elevated executables` - the best way to hunt for these is to look for an embedded manifest in them that says `<autoElevate>true</autoElevate>`.
-- `Auto elevated COM objects` - those are DLLs that are under a specific list
+- `Auto elevated COM objects` - those are DLLs that host special COM objects and will run in an elevated `dllhost.exe`.
+- `Auto elevated scheduled tasks` - scheduled tasks that run with "highest privileges".
 
 Usually UAC bypasses are logic bugs that let an attacker affect an auto-elevated program's operation or flow in a way that ultimately executes arbitrary code. I'd like to share a few examples I discovered in the past (all of those were reported and fixed over time):
 
-## Environment variable poisoning
+### Environment variable poisoning
 The code flow in the auto-elevated `SystemSettingsAdminFlows.exe` when given the command-line argument `InstallInternalDeveloperModePackage` demonstrates this technique well:
 
 ```c
@@ -99,7 +100,7 @@ As can be seen, a child process will be created with [CreateProcessW](https://le
 
 The idea is that auto-elevated processes will spawn child processes with the same integrity level (at least by default, when using `CreateProcessW` as we've seen). A similar idea happens with the `ShellExecute(Ex)W\A` API, as we'll see soon.
 
-## HKCU and file associations
+### HKCU and file associations
 This code was taken from an old version of `CompMgmtLauncher.exe`, which was an auto-elevated executable:
 
 ```c
@@ -175,7 +176,7 @@ As before, the code calls the [ShellExecuteExW](https://learn.microsoft.com/en-u
 3. Run `FodHelper.exe`.
 4. Delete the registry key we just created.
 
-## Auto-elevated COM object interfaces
+### Auto-elevated COM object interfaces
 An attacker can use `out-of-proc auto-elevated COM objects` and invoke their interface. Invocation results in a new `dllhost.exe` elevated process hosting the COM DLL service, receiving requests and acting on its client's behalf.  
 Many interesting COM objects exist, and I just so happened to find one in 2017 - one with `CLSID_ElevatedshellLink`. It exposed functionality to create a new link, here's how it looked like:
 
@@ -200,7 +201,7 @@ For exploitation purposes, note that the OS will still pop-up a UAC prompt unles
 
 I talked about [injection](https://github.com/yo-yo-yo-jbo/injection_and_hooking_intro/) and the [PEB](https://github.com/yo-yo-yo-jbo/msf_shellcode_analysis/) in past posts, so I won't discuss them too much. You can find PEB spoofing implementations all around the internet, [this](https://github.com/FuzzySecurity/PowerShell-Suite/blob/master/Masquerade-PEB.ps1) is a good place to start.
 
-## Auto-elevated tasks
+## Auto-elevated tasks and interpreters
 Sometimes you might find scheduled tasks that run with high privileges, but triggerable from a non-elevated user.  
 Those tasks might suffer from the same issues we've seen previously (registry poisoning, environment variable poisoning, path dependencies and others).  
 Here's on example I found:
@@ -228,3 +229,11 @@ echo "C:\temp\evil.exe" >> $profile
 
 Note that `cmd.exe` without the `/d` flag has a similar property (this time using the `HKCU` registry path `HKCU\Software\Microsoft\Command Processor\AutoRun`)!
 
+## For defenders
+Since UAC bypasses are not considered a security boundary, this becomes a real dilemma. There are some good approaches that could be taken, if you monitor your endpoints:
+1. There are certain environment variables that should never be modified (like `windir` and `systemroot`).
+2. There are file associations that are not expected to be modified (`mscfile`, `lnkfile` and others).
+3. Some URL associations are not expected to be modified (all the ones that start with `ms-` probably).
+4. Looking for suspicious activity by elevated `dllhost.exe` instances.
+5. Looking for DLL with common Windows names that are dropped in non-standard locations.
+6. Covering new techniques from projects like UACME.
