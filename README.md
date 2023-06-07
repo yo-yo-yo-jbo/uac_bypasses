@@ -1,5 +1,5 @@
 # A bit about UAC bypasses
-Today I wanted to talk a bit about UAC bypasses.  
+Today I wanted to talk a bit about UAC bypasses; I found quite a lot of those back in 2017 and wanted to share some insights.  
 In this blogpost I will describe what UAC is, how to approach UAC bypass hunting and what the future might hold.
 
 ## Motivation for UAC
@@ -58,7 +58,7 @@ When searching for new UAC bypasses, the obvious targets are components that aut
 - `Auto elevated executables` - the best way to hunt for these is to look for an embedded manifest in them that says `<autoElevate>true</autoElevate>`.
 - `Auto elevated COM objects` - those are DLLs that are under a specific list
 
-Usually UAC bypasses are logic bugs that let an attacker affect an auto-elevated program's operation or flow in a way that ultimately executes arbitrary code. I'd like to share a few examples I discovered in the past:
+Usually UAC bypasses are logic bugs that let an attacker affect an auto-elevated program's operation or flow in a way that ultimately executes arbitrary code. I'd like to share a few examples I discovered in the past (all of those were reported and fixed over time):
 
 ## Environment variable poisoning
 The code flow in the auto-elevated `SystemSettingsAdminFlows.exe` when given the command-line argument `InstallInternalDeveloperModePackage` demonstrates this technique well:
@@ -174,4 +174,29 @@ As before, the code calls the [ShellExecuteExW](https://learn.microsoft.com/en-u
 2. Run `reg add HKCU\Software\Classes\%SettingsProgId%\shell\open\command /ve /t REG_EXPAND_SZ /d "%temp%\my_evil_handler.exe" /f`.
 3. Run `FodHelper.exe`.
 4. Delete the registry key we just created.
+
+## Auto-elevated COM object interfaces
+An attacker can use `out-of-proc auto-elevated COM objects` and invoke their interface. Invocation results in a new `dllhost.exe` elevated process hosting the COM DLL service, receiving requests and acting on its client's behalf.  
+Many interesting COM objects exist, and I just so happened to find one in 2017 - one with `CLSID_ElevatedshellLink`. It exposed functionality to create a new link, here's how it looked like:
+
+```c
+STDAPI _CreateNewLink(CREATELINKDATAA* ptLinkData, INewShortcutHook* phsh)
+{
+    HRESULT hr = S_OK;
+    
+    if (ptLinkData->dwFlags & 0x200)
+    {
+        hr = CopyFile(ptLinkData->szExeName, ptLinkData->szLinkName, FALSE) ? S_OK : ResultFromKnownLastError();
+    }
+    
+    // More stuff here
+}
+```
+
+This allows an attacker to call `CopyFile` on arbitrary user-controlled source and destination paths, from an elevated context!  
+For exploitation purposes, note that the OS will still pop-up a UAC prompt unless the auto-elevated COM object is `explorer.exe`. This can be resolved in two ways:
+1. Inject to `explorer.exe` (you can do it without elevation, easily).
+2. Fake your own `PEB` to make the OS think you are `explorer.exe`. This involves changing your command-line and the module list.
+
+I talked about [injection](https://github.com/yo-yo-yo-jbo/injection_and_hooking_intro/) and the [PEB](https://github.com/yo-yo-yo-jbo/msf_shellcode_analysis/) in past posts, so I won't discuss them too much. You can find PEB spoofing implementations all around the internet, [this](https://github.com/FuzzySecurity/PowerShell-Suite/blob/master/Masquerade-PEB.ps1) is a good place to start.
 
