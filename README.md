@@ -61,6 +61,11 @@ When searching for new UAC bypasses, the obvious targets are components that aut
 
 Usually UAC bypasses are logic bugs that let an attacker affect an auto-elevated program's operation or flow in a way that ultimately executes arbitrary code. I'd like to share a few examples I discovered in the past (all of those were reported and fixed over time):
 
+## DLL loading
+Some auto-elevated components (mostly auto-elevated executables, I guess) might load a DLL from paths that could be written to without being elevated.  
+I will not be covering those, but those were quite prevalent in the early days of UAC bypasses, and can still be found occasionally.  
+Even tools like [Procmon](https://learn.microsoft.com/en-us/sysinternals/downloads/procmon) could be helpful in hunting for those!
+
 ### Environment variable poisoning
 The code flow in the auto-elevated `SystemSettingsAdminFlows.exe` when given the command-line argument `InstallInternalDeveloperModePackage` demonstrates this technique well:
 
@@ -237,3 +242,9 @@ Since UAC bypasses are not considered a security boundary, this becomes a real d
 4. Looking for suspicious activity by elevated `dllhost.exe` instances.
 5. Looking for DLL with common Windows names that are dropped in non-standard locations.
 6. Covering new techniques from projects like UACME.
+
+## Summary
+I hope this blogpost was a nice motivation to look for some new UAC bypasses (and report them responsibly).  
+The different attack vectors I presented cover most of the UAC bypasses out there (although there are esoteric ones, too).  
+
+Jonathan Bar Or
